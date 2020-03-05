@@ -16,20 +16,20 @@ from vgg import Vgg16
 
 # Global Variables
 IMAGE_SIZE = 256
-BATCH_SIZE = 4
+BATCH_SIZE = 8
 LEARNING_RATE = 1e-3
 EPOCHS = 2
 STYLE_WEIGHT = 1e5
 CONTENT_WEIGHT = 1e0
 TV_WEIGHT = 1e-7
 
-def train(args):          
+def train(args):
     # GPU enabling
     if (args.gpu != None):
         use_cuda = True
         dtype = torch.cuda.FloatTensor
         torch.cuda.set_device(args.gpu)
-        print "Current device: %d" %torch.cuda.current_device()
+        print("Current device: %d" %torch.cuda.current_device())
 
     # visualization of training controlled by flag
     visualize = (args.visualize != None)
@@ -55,7 +55,7 @@ def train(args):
 
     # define network
     image_transformer = ImageTransformNet().type(dtype)
-    optimizer = Adam(image_transformer.parameters(), LEARNING_RATE) 
+    optimizer = Adam(image_transformer.parameters(), LEARNING_RATE)
 
     loss_mse = torch.nn.MSELoss()
 
@@ -117,20 +117,20 @@ def train(args):
             for j in range(4):
                 style_loss += loss_mse(y_hat_gram[j], style_gram[j][:img_batch_read])
             style_loss = STYLE_WEIGHT*style_loss
-            aggregate_style_loss += style_loss.data[0]
+            aggregate_style_loss += style_loss.data
 
             # calculate content loss (h_relu_2_2)
-            recon = y_c_features[1]      
+            recon = y_c_features[1]
             recon_hat = y_hat_features[1]
             content_loss = CONTENT_WEIGHT*loss_mse(recon_hat, recon)
-            aggregate_content_loss += content_loss.data[0]
+            aggregate_content_loss += content_loss.data
 
             # calculate total variation regularization (anisotropic version)
             # https://www.wikiwand.com/en/Total_variation_denoising
             diff_i = torch.sum(torch.abs(y_hat[:, :, :, 1:] - y_hat[:, :, :, :-1]))
             diff_j = torch.sum(torch.abs(y_hat[:, :, 1:, :] - y_hat[:, :, :-1, :]))
             tv_loss = TV_WEIGHT*(diff_i + diff_j)
-            aggregate_tv_loss += tv_loss.data[0]
+            aggregate_tv_loss += tv_loss.data
 
             # total loss
             total_loss = style_loss + content_loss + tv_loss
@@ -144,7 +144,7 @@ def train(args):
                 status = "{}  Epoch {}:  [{}/{}]  Batch:[{}]  agg_style: {:.6f}  agg_content: {:.6f}  agg_tv: {:.6f}  style: {:.6f}  content: {:.6f}  tv: {:.6f} ".format(
                                 time.ctime(), e + 1, img_count, len(train_dataset), batch_num+1,
                                 aggregate_style_loss/(batch_num+1.0), aggregate_content_loss/(batch_num+1.0), aggregate_tv_loss/(batch_num+1.0),
-                                style_loss.data[0], content_loss.data[0], tv_loss.data[0]
+                                style_loss.data, content_loss.data, tv_loss.data
                             )
                 print(status)
 
@@ -169,6 +169,10 @@ def train(args):
                 utils.save_image(maine_path, outputTestImage_maine.data[0])
 
                 print("images saved")
+                if ((batch_num + 1) % 10000 == 0):
+                    filename = "models/" + str(style_name) + "_" + '{}'.format(batch_num)+ ".model"
+                    torch.save(image_transformer.state_dict(), filename)
+
                 image_transformer.train()
 
     # save model
@@ -181,7 +185,7 @@ def train(args):
         os.makedirs("models")
     filename = "models/" + str(style_name) + "_" + str(time.ctime()).replace(' ', '_') + ".model"
     torch.save(image_transformer.state_dict(), filename)
-    
+
     if use_cuda:
         image_transformer.cuda()
 
@@ -191,7 +195,7 @@ def style_transfer(args):
         use_cuda = True
         dtype = torch.cuda.FloatTensor
         torch.cuda.set_device(args.gpu)
-        print "Current device: %d" %torch.cuda.current_device()
+        print("Current device: %d" %torch.cuda.current_device())
 
     # content image
     img_transform_512 = transforms.Compose([
@@ -211,8 +215,11 @@ def style_transfer(args):
     style_model.load_state_dict(torch.load(args.model_path))
 
     # process input image
+    time_start_my = time.time()
     stylized = style_model(content).cpu()
+    time_end_my = time.time()
     utils.save_image(args.output, stylized.data[0])
+    print('totally cost',time_end_my-time_start_my)
 
 
 def main():
@@ -235,10 +242,10 @@ def main():
 
     # command
     if (args.subcommand == "train"):
-        print "Training!"
+        print ("Training!")
         train(args)
     elif (args.subcommand == "transfer"):
-        print "Style transfering!"
+        print ("Style transfering!")
         style_transfer(args)
     else:
         print("invalid command")
